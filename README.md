@@ -7,49 +7,82 @@
 具体分析流程如下
 1.导入数据
 导入必要的模块
+
 import os
+
 import pandas as pd
+
 import numpy as np
+
 import matplotlib.pyplot as plt
+
 from matplotlib import pylab
+
 import seaborn as sns
+
 import sqlite3
+
 2.从数据库文件中读取数据
 # 连接数据库，从数据库中读取数据
+
 cwd = os.getcwd()  #获得当前的文件路径
+
 conn = sqlite3.connect(str(cwd) + "/dataport_sqlite")
+
 cursor = conn.cursor()  #构建指针
+
 query = "SELECT * FROM new_table;"
+
 cursor.execute(query)    #执行读取数据命令
+
 data = cursor.fetchall() #抓取数据
+
 3.用pandas将数据转换成DataFrame格式
 # 用pandas将数据转换成DataFrame格式
+
 loads_df = pd.DataFrame(data, columns=['id','date','energy_use'])
+
 print(loads_df.head())
+
 loads_df的前五列如下图所示：
 数据中，id代表不同的用户；date代表时间，每15min采集一次；energy_use代表测量的电量，以kW表示。通过简单的查询命令可以获得数据集的规模：
 4.数据清洗
 #查看当前数据中的空缺值
-loads_df = loads_df.replace('',np.nan)简单分析，可以得到
+
+loads_df = loads_df.replace('',np.nan)
+
+简单分析，可以得到
 当前数据集含有646981行,3列
 最早时间: 2015-07-01 00:00:00
 最晚时间: 2015-08-01 00:00:00
 （正好是一个月的用电记录）
 可以看到本次分析的用户共有220户。
 print(loads_df.isnull().sum())
+
 分析发现，数据中有10695个空缺值，删除空缺值，同时为了保证后期数据运算的需要，改变数据类型。
+
 loads_df.loc[:,'energy_use'] = loads_df.energy_use.astype(float)
+
 loads_df.loc[:,'id'] = loads_df['id'].astype(int)
+
 loads_df.loc[:,'date'] = pd.to_datetime(loads_df.date)
+
 5.特征工程
 上面得到的用电数据中，时间列中包含了年月日和具体时间。为了获得用户不同时间的用电行为，进一步对时间列进行处理如下：
 # 添加一代表星期的列，isoweekday会根据日期判定是周几
+
 loads_df.loc[:,'type_day'] = loads_df.date.apply(lambda x: x.isoweekday())
+
 # 添加一代表日期的列，day会根据具体日期判定是几号
+
 loads_df.loc[:,'day_of_month'] = loads_df.date.apply(lambda x: x.day)
+
 # 按照id和日期进行重新排序
+
 loads_df = loads_df.sort_values(['id', 'date'], ascending=[True, True])
+
 loads_df = loads_df.reset_index(drop=True)
+
 为了更好的避免用电行为的差异，过滤掉时间为周末的用电数据，将当前的表按照数据透视表的方式进行处理，将不同的时间分列
 假设工作日每天的用电情况近似，以10号当天不同时间的用电数据进行具体分析
         得到不同用户的用电曲线的较为杂乱，没有规律，对获得的数据进行聚类。
@@ -125,13 +158,21 @@ class EnergyFingerPrints():
         plt.show()
 7.模型调用
 分析各簇中心点与样本的距离
+
 loads_wide_df = loads_wide_df.dropna()
+
 load_data=np.array(loads_wide_df)
+
 energy_clusters = EnergyFingerPrints(load_data)
+
 energy_clusters.elbow_method(n_clusters=13)
+
 显然，随着聚类簇数n的增加，样本点至中心簇间的距离逐渐减小。这里，我们取n=4为拐点。随后，构建一个聚类簇为4的模型，并分组
+
 energy_clusters.fit(n_clusters = 4)
+
 energy_clusters.get_cluster_counts()
+
 构建簇和用户id的DataFrame(cls)，并可以筛选出各簇中相应的id
 将各簇的用户平均用电行为曲线进行类比，得出如下结论：
 结论：
